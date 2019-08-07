@@ -10,27 +10,29 @@ class ContactsStream(Stream):
         key_properties=['id'],
         replication_method='incremental',
         replication_key='modified_date',
-        incremental_search_key='updated_after',
+        incremental_search_key='modified_date',
         selected_by_default=False
     )
 
     schema = {
-        "contact_id": {
-            "type": ["null", "string"]
-        },
-        "email_address": {
-            "type": ["null", "string"]
-        },
-        "eloqua_contact_id": {
-            "type": ["null", "string"]
-        },
-        "organization_user_id": {
-            "type": ["null", "string"]
-        },
-        "modified_date": {
-            "type": ["null", "string"]
-        },
-        "modified_date_crm": {
-            "type": ["null", "string"]
+        "properties": {
+            "contact_id": {
+                "type": ["null", "string"]
+            },
+            "email_address": {
+                "type": ["null", "string"]
+            },
+            "eloqua_contact_id": {
+                "type": ["null", "string"]
+            },
+            "organization_user_id": {
+                "type": ["null", "string"]
+            },
+            "modified_date": {
+                "type": ["null", "string"]
+            },
+            "modified_date_crm": {
+                "type": ["null", "string"]
+            }
         }
     }

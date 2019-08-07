@@ -3,9 +3,12 @@ import backoff
 import base64
 import time
 import requests
+import pendulum
+import json
 
 from requests import HTTPError
 from tap_kit import BaseClient
+from requests import request
 
 LOGGER = singer.get_logger()
 
@@ -70,15 +73,19 @@ class EloquaClient(BaseClient):
         username = self.config.get('username')
         password = self.config.get('password')
 
-        key_before_encoding = sitename + '\\' + username + ':' + password
-        auth_key = base64.b64encode(key_before_encoding)
+        key_str = sitename + '\\' + username + ':' + password
+        key_bytes = key_str.encode("utf-8")
+        auth_key_bytes = base64.b64encode(key_bytes)
+        auth_key_str = auth_key_bytes.decode("utf-8")
 
-        return auth_key
+        return auth_key_str
 
-    def build_base_url(self):
+    def build_base_url(self, method='GET'):
         """Need to request the base url from the api"""
         path = BASE_URL_PATH
-        base_url = self.make_request(path)
+        response = request(method, path, headers=self.request_headers)
+        response_json = response.json()
+        base_url = response_json.get('urls').get('base')
         return base_url
 
     def request_bulk_export(self, stream, start_date):
@@ -91,7 +98,8 @@ class EloquaClient(BaseClient):
     def build_export_definition(self, stream, start_date):
         """Creates a data export and returns an export uri"""
         request_body = self.build_export_body(stream, start_date)
-        request_url = self.base_url + BULK_PATH + stream.name + EXPORTS_ENDPOINT
+        LOGGER.info('body %s' % json.dumps(request_body))
+        request_url = self.base_url + BULK_PATH + stream.stream + EXPORTS_ENDPOINT
         request_config = {
             'url': request_url,
             'headers': self.request_headers,
@@ -100,30 +108,29 @@ class EloquaClient(BaseClient):
         method = 'POST'
 
         response = self.make_request(request_config, request_body, method)
-        export_uri = response.content.uri
+        response_json = response.json()
+        export_uri = response_json.get('uri')
         return export_uri
 
     def build_export_body(self, stream, start_date):
         """Builds the export body based on the stream metadata"""
         """start_date needs to be formatted as 2019-08-06 04:29:15.440"""
         name = 'Eloqua {stream_name} stream: {start_date}'.format(
-            stream_name=stream.name,
+            stream_name=stream.stream,
             start_date=start_date
         )
-        fields = self.config.export_fields
+        fields = self.config.get('export_fields')
+        filter_field = fields.get(stream.meta_fields.get('replication_key'))
+        filter = "'{filter_field}'>='{start_date}'".format(
+            filter_field=filter_field,
+            start_date=self.config.get('start_date')
+        )
 
         request_body = {
             "name": name,
-            "fields": fields
+            "fields": fields,
+            "filter": filter
         }
-
-        if stream.replication_method == 'incremental':
-            """TODO: replace with actual filter field"""
-            filter = "'{filter_field}'>='{start_date}'".format(
-                filter_field=stream.filter_field,
-                start_date=start_date
-            )
-            request_body["filter"] = filter
 
         return request_body
 
@@ -141,7 +148,8 @@ class EloquaClient(BaseClient):
         method = 'POST'
 
         response = self.make_request(request_config, request_body, method)
-        sync_status_uri = response.content.uri
+        response_json = response.json()
+        sync_status_uri = response_json.get('uri')
 
         return sync_status_uri
 
@@ -155,7 +163,9 @@ class EloquaClient(BaseClient):
         }
 
         response = self.make_request(request_config)
-        status = response.content.status
+        response_json = response.json()
+        status = response_json.get('status')
+
         return status
 
     def poll_eloqua_api(self, sync_status_uri):
@@ -220,12 +230,14 @@ class EloquaClient(BaseClient):
             'headers': self.request_headers,
             'run': True
         }
-        sync_logs_response = self.make_request(
+        response = self.make_request(
             request_config
         )
 
+        response_json = response.json()
+
         errors = []
-        for log_obj in sync_logs_response['items']:
+        for log_obj in response_json['items']:
             if log_obj['severity'] != 'information':
                 errors.append(log_obj['message'])
 
@@ -243,6 +255,7 @@ class EloquaClient(BaseClient):
         }
 
         response = self.make_request(request_config)
-        records = response.content.items
-        has_more = True if response.content.hasMore == 'true' else False
+        response_json = response.json()
+        records = response_json.get('items')
+        has_more = True if response_json.get('hasMore') == 'true' else False
         return records, has_more

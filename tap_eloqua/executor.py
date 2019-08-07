@@ -30,10 +30,7 @@ class EloquaExecutor(TapExecutor):
         last_updated = format_last_updated_for_request(
             stream.update_and_return_bookmark(), self.replication_key_format
         )
-        LOGGER.info("Extracting {stream} since {last_updated}.").format(
-            stream=stream,
-            last_updated=last_updated
-        )
+        LOGGER.info("Extracting %s since %s." % (stream, last_updated))
 
         sync_uri = self.client.request_bulk_export(stream, last_updated)
         offset = 0

@@ -7,7 +7,7 @@ from .contacts import ContactsStream
 REQUIRED_CONFIG_KEYS = [
     "start_date",
     "sitename",
-	"username",
+    "username",
     "password",
     "export_fields"
 ]
@@ -18,11 +18,11 @@ STREAMS = [
 
 
 def main():
-	main_method(
-		REQUIRED_CONFIG_KEYS,
-		EloquaClient,
-		EloquaExecutor,
-		STREAMS
+    main_method(
+        config_keys=REQUIRED_CONFIG_KEYS,
+        tap=EloquaExecutor,
+        client=EloquaClient,
+        streams=STREAMS
 	)
 
 
