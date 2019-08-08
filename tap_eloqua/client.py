@@ -27,12 +27,19 @@ EXPORT_DATA_ENDPOINT = '/data'
 # Import batch size
 MAX_BULK_REQUEST = 50000
 # How long to wait before polling the status API again
-WAIT_SECS_BETWEEN_STATUS_CHECKS = 5
-# How many milliseconds to wait between consecutive requests. Need a small
-# delay to stay below limits for Eloqua API.
-WAIT_BETWEEN_REQUESTS_MS = 150
+WAIT_SECS_BETWEEN_STATUS_CHECKS = 10
 # How many times to try getting sync status before giving up
 MAX_NUM_POLLING_ATTEMPTS = 10
+# Request methods
+POST = 'POST'
+
+
+class MaxPollingAttemptsException(Exception):
+    pass
+
+
+class FailedSyncException(Exception):
+    pass
 
 
 class EloquaClient(BaseClient):
@@ -86,34 +93,41 @@ class EloquaClient(BaseClient):
         response = request(method, path, headers=self.request_headers)
         response_json = response.json()
         base_url = response_json.get('urls').get('base')
+
         return base_url
+
+    def build_request_config(self, url, run=True):
+        request_config = {
+            'url': url,
+            'headers': self.request_headers,
+            'run': run
+        }
+
+        return request_config
 
     def request_bulk_export(self, stream, start_date):
         """Creates a data export and returns the export id"""
         export_uri = self.build_export_definition(stream, start_date)
         sync_status_uri = self.synchronize_export_data(export_uri)
         self.poll_eloqua_api(sync_status_uri)
+
         return sync_status_uri
 
     def build_export_definition(self, stream, start_date):
         """Creates a data export and returns an export uri"""
         request_body = self.build_export_body(stream, start_date)
-        LOGGER.info('body %s' % json.dumps(request_body))
         request_url = self.base_url + BULK_PATH + stream.stream + EXPORTS_ENDPOINT
-        request_config = {
-            'url': request_url,
-            'headers': self.request_headers,
-            'run': True
-        }
-        method = 'POST'
+        request_config = self.build_request_config(request_url)
+        method = POST
 
         response = self.make_request(request_config, request_body, method)
         response_json = response.json()
         export_uri = response_json.get('uri')
+
         return export_uri
 
     def build_export_body(self, stream, start_date):
-        """Builds the export body based on the stream metadata"""
+        """Builds the export body based on the config and stream metadata"""
         """start_date needs to be formatted as 2019-08-06 04:29:15.440"""
         name = 'Eloqua {stream_name} stream: {start_date}'.format(
             stream_name=stream.stream,
@@ -123,7 +137,7 @@ class EloquaClient(BaseClient):
         filter_field = fields.get(stream.meta_fields.get('replication_key'))
         filter = "'{filter_field}'>='{start_date}'".format(
             filter_field=filter_field,
-            start_date=self.config.get('start_date')
+            start_date=start_date
         )
 
         request_body = {
@@ -140,12 +154,8 @@ class EloquaClient(BaseClient):
             "syncedInstanceUri": export_uri
         }
         request_url = self.base_url + BULK_PATH + SYNC_EXPORT_DATA_ENDPOINT
-        request_config = {
-            'url': request_url,
-            'headers': self.request_headers,
-            'run': True
-        }
-        method = 'POST'
+        request_config = self.build_request_config(request_url)
+        method = POST
 
         response = self.make_request(request_config, request_body, method)
         response_json = response.json()
@@ -156,11 +166,7 @@ class EloquaClient(BaseClient):
     def check_sync_status(self, sync_status_uri):
         """Takes a sync status uri and retrieves its status"""
         request_url = self.base_url + BULK_PATH + sync_status_uri
-        request_config = {
-            'url': request_url,
-            'headers': self.request_headers,
-            'run': True
-        }
+        request_config = self.build_request_config(request_url)
 
         response = self.make_request(request_config)
         response_json = response.json()
@@ -213,6 +219,10 @@ class EloquaClient(BaseClient):
                                 'error logs were found from Eloqua.'
 
                 LOGGER.error(error_msg)
+                raise FailedSyncException()
+
+        LOGGER.error('Maximum number of polling attemps made.')
+        raise MaxPollingAttemptsException()
     
     def fetch_sync_logs(self, sync_logs_uri):
         """
@@ -225,15 +235,8 @@ class EloquaClient(BaseClient):
             errors (list)
         """
         request_url = self.base_url + BULK_PATH + sync_logs_uri
-        request_config = {
-            'url': request_url,
-            'headers': self.request_headers,
-            'run': True
-        }
-        response = self.make_request(
-            request_config
-        )
-
+        request_config = self.build_request_config(request_url)
+        response = self.make_request(request_config)
         response_json = response.json()
 
         errors = []
@@ -243,19 +246,17 @@ class EloquaClient(BaseClient):
 
         return errors
 
-    def fetch_bulk_export_records(self, sync_status_uri, offset):
+    def fetch_bulk_export_records(self, sync_status_uri, offset, run):
         """Once the export data is ready this will retrieve the records from the export"""
         offset_param = '?offset={offset}'.format(offset=offset)
         request_url = self.base_url + BULK_PATH + sync_status_uri + \
             EXPORT_DATA_ENDPOINT + offset_param
-        request_config = {
-            'url': request_url,
-            'headers': self.request_headers,
-            'run': True
-        }
+        request_config = self.build_request_config(request_url, run)
 
         response = self.make_request(request_config)
         response_json = response.json()
         records = response_json.get('items')
-        has_more = True if response_json.get('hasMore') == 'true' else False
-        return records, has_more
+        has_more = response_json.get('hasMore')
+        total_records = response_json.get('totalResults')
+
+        return records, has_more, total_records
