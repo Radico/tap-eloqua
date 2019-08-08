@@ -5,6 +5,7 @@ import time
 import requests
 import pendulum
 import json
+import ast
 
 from requests import HTTPError
 from tap_kit import BaseClient
@@ -133,7 +134,8 @@ class EloquaClient(BaseClient):
             stream_name=stream.stream,
             start_date=start_date
         )
-        fields = self.config.get('export_fields')
+        str_fields = self.config.get('export_fields')
+        fields = self.string_to_dict(str_fields)
         filter_field = fields.get(stream.meta_fields.get('replication_key'))
         filter = "'{filter_field}'>='{start_date}'".format(
             filter_field=filter_field,
@@ -147,6 +149,10 @@ class EloquaClient(BaseClient):
         }
 
         return request_body
+
+    def string_to_dict(self, str):
+        dict = ast.literal_eval(str)
+        return dict
 
     def synchronize_export_data(self, export_uri):
         """Creates a sync for the export and returns a status uri"""
