@@ -26,8 +26,6 @@ SYNC_EXPORT_DATA_ENDPOINT = 'syncs'
 # Endpoint for export data
 EXPORT_DATA_ENDPOINT = '/data'
 # Import batch size
-MAX_BULK_REQUEST = 50000
-# How long to wait before polling the status API again
 WAIT_SECS_BETWEEN_STATUS_CHECKS = 10
 # How many times to try getting sync status before giving up
 MAX_NUM_POLLING_ATTEMPTS = 10
@@ -54,18 +52,6 @@ class EloquaClient(BaseClient):
         self.request_headers = self.build_headers()
         self.base_url = self.build_base_url()
 
-    @staticmethod
-    def requests_method(method, request_config, body):
-        if 'Content-Type' not in request_config['headers']:
-            request_config['headers']['Content-Type'] = 'application/json'
-
-        return requests.request(
-            method,
-            request_config['url'],
-            headers=request_config['headers'],
-            json=body
-        )
-
     def build_headers(self):
         """These headers should remain the same for all request types"""
         auth_key = self.build_basic_authorization()
@@ -74,6 +60,10 @@ class EloquaClient(BaseClient):
             'Content-Type': 'application/json',
             'Authorization': 'Basic {auth_key}'.format(auth_key=auth_key)
         }
+
+    def build_param(self, key, value, dict={}):
+        dict[key] = value
+        return dict
 
     def build_basic_authorization(self):
         """Encodes the sitename, username, and password to base64"""
@@ -97,10 +87,11 @@ class EloquaClient(BaseClient):
 
         return base_url
 
-    def build_request_config(self, url, run=True):
+    def build_request_config(self, url, params=None, run=True):
         request_config = {
             'url': url,
             'headers': self.request_headers,
+            'params': params,
             'run': run
         }
 
@@ -252,12 +243,13 @@ class EloquaClient(BaseClient):
 
         return errors
 
-    def fetch_bulk_export_records(self, sync_status_uri, offset, run):
+    def fetch_bulk_export_records(self, sync_status_uri, offset, limit, run):
         """Once the export data is ready this will retrieve the records from the export"""
-        offset_param = '?offset={offset}'.format(offset=offset)
+        param_payload = self.build_param(key='offset', value=offset)
+        self.build_param(key='limit', value=limit, dict=param_payload)
         request_url = self.base_url + BULK_PATH + sync_status_uri + \
-            EXPORT_DATA_ENDPOINT + offset_param
-        request_config = self.build_request_config(request_url, run)
+            EXPORT_DATA_ENDPOINT
+        request_config = self.build_request_config(request_url, param_payload, run)
 
         response = self.make_request(request_config)
         response_json = response.json()

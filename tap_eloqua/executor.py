@@ -8,7 +8,7 @@ import pendulum
 
 LOGGER = singer.get_logger()
 
-MAX_RECORDS_RETURNED = 1000
+MAX_RECORDS_RETURNED = 50000
 
 class EloquaExecutor(TapExecutor):
 
@@ -39,7 +39,7 @@ class EloquaExecutor(TapExecutor):
 
         while run:
             records, has_more, total_records = self.client.fetch_bulk_export_records(
-                sync_uri, offset, run
+                sync_uri, offset, MAX_RECORDS_RETURNED, run
             )
             transform_write_and_count(stream, records)
 
@@ -50,7 +50,7 @@ class EloquaExecutor(TapExecutor):
             )
             if latest_record_batch > latest_record_date:
                 latest_record_date = latest_record_batch
-
+            
             if not has_more:
                 run = False
                 LOGGER.info('Completed fetching records. Fetched %s records.' % total_records)
