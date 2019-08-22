@@ -2,6 +2,7 @@ from tap_kit import main_method
 from .client import EloquaClient
 from .executor import EloquaExecutor
 from .contacts import ContactsStream
+from .activities import ActivitiesStream
 
 
 REQUIRED_CONFIG_KEYS = [
@@ -9,11 +10,13 @@ REQUIRED_CONFIG_KEYS = [
     "sitename",
     "username",
     "password",
-    "export_fields"
+    "contacts_export_fields",
+    "activities_export_fields"
 ]
 
 STREAMS = [
 	ContactsStream,
+    ActivitiesStream
 ]
 
 

@@ -29,9 +29,12 @@ EXPORT_DATA_ENDPOINT = '/data'
 WAIT_SECS_BETWEEN_STATUS_CHECKS = 10
 # How many times to try getting sync status before giving up
 MAX_NUM_POLLING_ATTEMPTS = 10
+# How many times to retry failed sync
+MAX_RETRY_ATTEMPTS = 20
 # Request methods
 POST = 'POST'
-
+# Field for event filter
+ACTIVITY_TYPE = '{{Activity.Type}}'
 
 class MaxPollingAttemptsException(Exception):
     pass
@@ -97,17 +100,30 @@ class EloquaClient(BaseClient):
 
         return request_config
 
-    def request_bulk_export(self, stream, start_date):
+    def request_bulk_export(self, stream, start_date, event):
         """Creates a data export and returns the export id"""
-        export_uri = self.build_export_definition(stream, start_date)
-        sync_status_uri = self.synchronize_export_data(export_uri)
-        self.poll_eloqua_api(sync_status_uri)
+        """Note the bulk export is unreliable and often"""
+        """requires multiple syncs in order to succeed"""
+        export_uri = self.build_export_definition(stream, start_date, event)
+        sync_status = False
+        retries = 0
+        while not sync_status:
+            LOGGER.info('Attempting sync; %s previous attempt(s) made.' % retries)
+            if retries >= MAX_RETRY_ATTEMPTS:
+                LOGGER.error('Max number of sync retries made.')
+                raise FailedSyncException()
+
+            sync_status_uri = self.synchronize_export_data(export_uri)
+            sync_status = self.poll_eloqua_api(sync_status_uri)
+
+            retries = retries + 1
+            time.sleep(WAIT_SECS_BETWEEN_STATUS_CHECKS)
 
         return sync_status_uri
 
-    def build_export_definition(self, stream, start_date):
+    def build_export_definition(self, stream, start_date, event):
         """Creates a data export and returns an export uri"""
-        request_body = self.build_export_body(stream, start_date)
+        request_body = self.build_export_body(stream, start_date, event)
         request_url = self.base_url + BULK_PATH + stream.stream + EXPORTS_ENDPOINT
         request_config = self.build_request_config(request_url)
         method = POST
@@ -118,20 +134,31 @@ class EloquaClient(BaseClient):
 
         return export_uri
 
-    def build_export_body(self, stream, start_date):
+    def build_export_body(self, stream, start_date, event):
         """Builds the export body based on the config and stream metadata"""
         """start_date needs to be formatted as 2019-08-06 04:29:15.440"""
+        stream_name = stream.stream
         name = 'Eloqua {stream_name} stream: {start_date}'.format(
-            stream_name=stream.stream,
+            stream_name=stream_name,
             start_date=start_date
         )
-        str_fields = self.config.get('export_fields')
+        export_type = "{}_export_fields".format(stream.stream)
+        str_fields = self.config.get(export_type)
         fields = self.string_to_dict(str_fields)
         filter_field = fields.get(stream.meta_fields.get('replication_key'))
         filter = "'{filter_field}'>='{start_date}'".format(
             filter_field=filter_field,
             start_date=start_date
         )
+        if event:
+            event_filter = "'{filter_field}'='{event_type}'".format(
+                filter_field=ACTIVITY_TYPE,
+                event_type=event
+            )
+            filter = "{date_filter} AND {event_filter}".format(
+                date_filter=filter,
+                event_filter=event_filter
+            )
 
         request_body = {
             "name": name,
@@ -205,12 +232,15 @@ class EloquaClient(BaseClient):
                 sync_logs_uri = sync_status_uri + '/logs'
                 errors = self.fetch_sync_logs(sync_logs_uri)
                 if errors:
-                    error_msg = 'Errors during custom object sync: {}. ' \
+                    error_msg = 'Errors during sync: {}. ' \
                                 'Note that error messages may be ' \
                                 'unfortunately vague and refer to ' \
                                 'documentation: ' \
                                 'https://app.tettra.co/teams/simondata/pages' \
                                 '/eloqua-client'.format(errors)
+                    LOGGER.error(error_msg)
+                    LOGGER.info('Retrying activities export with new sync URI.')
+                    return False
                 else:
                     error_msg = 'Failure during custom object sync. No ' \
                                 'error logs were found from Eloqua.'
