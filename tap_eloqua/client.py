@@ -28,7 +28,7 @@ EXPORT_DATA_ENDPOINT = '/data'
 # How long to wait between polling and retries
 WAIT_SECS_BETWEEN_STATUS_CHECKS = 20
 # How many times to try getting sync status before giving up
-MAX_NUM_POLLING_ATTEMPTS = 10
+MAX_NUM_POLLING_ATTEMPTS = 20
 # How many times to retry failed sync before giving up
 MAX_RETRY_ATTEMPTS = 20
 # Request methods
@@ -100,11 +100,11 @@ class EloquaClient(BaseClient):
 
         return request_config
 
-    def request_bulk_export(self, stream, start_date, event):
+    def request_bulk_export(self, stream, start_date, end_date, event):
         """Creates a data export and returns the export id"""
         """Note the bulk export is unreliable and often"""
         """requires multiple syncs in order to succeed"""
-        export_uri = self.build_export_definition(stream, start_date, event)
+        export_uri = self.build_export_definition(stream, start_date, end_date, event)
         sync_status = False
         retries = 0
         while not sync_status:
@@ -121,9 +121,9 @@ class EloquaClient(BaseClient):
 
         return sync_status_uri
 
-    def build_export_definition(self, stream, start_date, event):
+    def build_export_definition(self, stream, start_date, end_date, event):
         """Creates a data export and returns an export uri"""
-        request_body = self.build_export_body(stream, start_date, event)
+        request_body = self.build_export_body(stream, start_date, end_date, event)
         request_url = self.base_url + BULK_PATH + stream.stream + EXPORTS_ENDPOINT
         request_config = self.build_request_config(request_url)
         method = POST
@@ -134,7 +134,7 @@ class EloquaClient(BaseClient):
 
         return export_uri
 
-    def build_export_body(self, stream, start_date, event):
+    def build_export_body(self, stream, start_date, end_date, event):
         """Builds the export body based on the config and stream metadata"""
         """start_date needs to be formatted as 2019-08-06 04:29:15.440"""
         stream_name = stream.stream
@@ -150,6 +150,17 @@ class EloquaClient(BaseClient):
             filter_field=filter_field,
             start_date=start_date
         )
+
+        if end_date:
+            end_date_filter = "'{filter_field}'<'{end_date}'".format(
+                filter_field=filter_field,
+                end_date=end_date
+            )
+            filter = "{start_date_filter} AND {end_date_filter}".format(
+                start_date_filter=filter,
+                end_date_filter=end_date_filter
+            )
+
         if event:
             event_filter = "'{filter_field}'='{event_type}'".format(
                 filter_field=ACTIVITY_TYPE,
