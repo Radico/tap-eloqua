@@ -69,6 +69,9 @@ class EloquaExecutor(TapExecutor):
                 request_end = request_filters[1]
                 request_start_str = request_start.to_datetime_string()
                 request_end_str = request_end.to_datetime_string()
+                LOGGER.info('Requesting export from %s to %s.' % (
+                    request_start_str, request_end_str
+                ))
 
                 sync_uri = self.client.request_bulk_export(stream, request_start_str, request_end_str, event)
                 offset = 0
@@ -79,7 +82,7 @@ class EloquaExecutor(TapExecutor):
                         sync_uri, offset, MAX_RECORDS_RETURNED, run
                     )
                     if total_records >= EXPORT_LIMIT:
-                        LOGGER.info('Export exceeds limit. Splitting into multiple requests.')
+                        LOGGER.info('Export exceeds 5M record limit. Splitting into multiple requests.')
                         new_end_date = request_start + ((request_end - request_start) / 2)
                         requests.append((request_start, new_end_date))
                         requests.append((new_end_date, request_end))
