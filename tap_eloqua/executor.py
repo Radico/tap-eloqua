@@ -62,6 +62,8 @@ class EloquaExecutor(TapExecutor):
         events = EVENT_TYPES.get(stream_name)
         for event in events:
             requests = [(start_date, end_date)]
+            if event:
+                LOGGER.info('Extracting %s activity.' % event)
 
             while requests:
                 request_filters = requests.pop(0)
