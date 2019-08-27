@@ -35,6 +35,9 @@ MAX_RETRY_ATTEMPTS = 20
 POST = 'POST'
 # Field for event filter
 ACTIVITY_TYPE = '{{Activity.Type}}'
+# Data endpoints
+CONTACTS = 'contacts'
+ACTIVITIES = 'activities'
 
 class MaxPollingAttemptsException(Exception):
     pass
@@ -54,6 +57,7 @@ class EloquaClient(BaseClient):
 
         self.request_headers = self.build_headers()
         self.base_url = self.build_base_url()
+        self.endpoint_name = None
 
     def build_headers(self):
         """These headers should remain the same for all request types"""
@@ -104,6 +108,8 @@ class EloquaClient(BaseClient):
         """Creates a data export and returns the export id"""
         """Note the bulk export is unreliable and often"""
         """requires multiple syncs in order to succeed"""
+        self.endpoint_name = ACTIVITIES if event else CONTACTS
+
         export_uri = self.build_export_definition(stream, start_date, end_date, event)
         sync_status = False
         retries = 0
@@ -124,7 +130,7 @@ class EloquaClient(BaseClient):
     def build_export_definition(self, stream, start_date, end_date, event):
         """Creates a data export and returns an export uri"""
         request_body = self.build_export_body(stream, start_date, end_date, event)
-        request_url = self.base_url + BULK_PATH + stream.stream + EXPORTS_ENDPOINT
+        request_url = self.base_url + BULK_PATH + self.endpoint_name + EXPORTS_ENDPOINT
         request_config = self.build_request_config(request_url)
         method = POST
 
@@ -142,7 +148,8 @@ class EloquaClient(BaseClient):
             stream_name=stream_name,
             start_date=start_date
         )
-        export_type = "{}_export_fields".format(stream.stream)
+
+        export_type = "{}_export_fields".format(self.endpoint_name)
         str_fields = self.config.get(export_type)
         fields = self.string_to_dict(str_fields)
         filter_field = fields.get(stream.meta_fields.get('replication_key'))

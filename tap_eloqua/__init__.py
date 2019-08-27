@@ -2,8 +2,12 @@ from tap_kit import main_method
 from .client import EloquaClient
 from .executor import EloquaExecutor
 from .contacts import ContactsStream
-from .activities import ActivitiesStream
-
+from .bounces import BouncesStream
+from .clicks import ClicksStream
+from .opens import OpensStream
+from .sends import SendsStream
+from .subscribes import SubscribesStream
+from .unsubscribes import UnsubscribesStream
 
 REQUIRED_CONFIG_KEYS = [
     "start_date",
@@ -16,7 +20,12 @@ REQUIRED_CONFIG_KEYS = [
 
 STREAMS = [
 	ContactsStream,
-    ActivitiesStream
+    BouncesStream,
+    ClicksStream,
+    OpensStream,
+    SendsStream,
+    SubscribesStream,
+    UnsubscribesStream,
 ]
 
 

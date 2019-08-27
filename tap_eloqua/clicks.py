@@ -2,9 +2,9 @@ from tap_kit.streams import Stream
 import singer
 
 
-class ActivitiesStream(Stream):
+class ClicksStream(Stream):
 
-    stream = 'activities'
+    stream = 'clicks'
 
     meta_fields = dict(
         key_properties=['id'],
