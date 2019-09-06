@@ -33,6 +33,12 @@ class ContactsStream(Stream):
             },
             "modified_date_crm": {
                 "type": ["null", "string"]
+            },
+            "email_highest_consent": {
+                "type": ["null", "string"]
+            },
+            "geo_communication_owner": {
+                "type": ["null", "string"]
             }
         }
     }
