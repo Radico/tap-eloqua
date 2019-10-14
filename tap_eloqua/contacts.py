@@ -39,6 +39,9 @@ class ContactsStream(Stream):
             },
             "geo_communication_owner": {
                 "type": ["null", "string"]
-            }
+            },
+            "c_email_highest_consent_country1": {
+                "type": ["null", "string"]
+            },
         }
     }
