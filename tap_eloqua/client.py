@@ -32,7 +32,7 @@ CONTACTS = 'contacts'
 ACTIVITIES = 'activities'
 
 # How long to wait between polling and retries
-WAIT_SECS_BETWEEN_STATUS_CHECKS = 20
+WAIT_SECS_BETWEEN_STATUS_CHECKS = 30
 # How many times to try getting sync status before giving up
 MAX_NUM_POLLING_ATTEMPTS = 50
 # How many times to retry failed sync before giving up
