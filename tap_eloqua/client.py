@@ -19,25 +19,48 @@ BASE_URL_PATH = 'https://login.eloqua.com/id'
 BULK_PATH = '/api/bulk/2.0/'
 # Path for rest api
 REST_PATH = '/api/REST/2.0/'
+# Endpoint for schemas
+SCHEMA_ENDPOINT = '/fields'
 # Endpoint for data exports
 EXPORTS_ENDPOINT = '/exports'
 # Endpoint for syncs
 SYNC_EXPORT_DATA_ENDPOINT = 'syncs'
 # Endpoint for export data
 EXPORT_DATA_ENDPOINT = '/data'
+# Data endpoints
+CONTACTS = 'contacts'
+ACTIVITIES = 'activities'
+
 # How long to wait between polling and retries
 WAIT_SECS_BETWEEN_STATUS_CHECKS = 20
 # How many times to try getting sync status before giving up
 MAX_NUM_POLLING_ATTEMPTS = 50
 # How many times to retry failed sync before giving up
 MAX_RETRY_ATTEMPTS = 20
+
 # Request methods
+GET = 'GET'
 POST = 'POST'
+
 # Field for event filter
 ACTIVITY_TYPE = '{{Activity.Type}}'
-# Data endpoints
-CONTACTS = 'contacts'
-ACTIVITIES = 'activities'
+
+# Event stream names
+SENDS = 'sends'
+OPENS = 'opens'
+CLICKS = 'clicks'
+SUBSCRIBES = 'subscribes'
+UNSUBSCRIBES = 'unsubscribes'
+BOUNCES = 'bounces'
+# Event type filters
+EVENT_TYPES = {
+    SENDS:'EmailSend',
+    OPENS:'EmailOpen',
+    CLICKS:'EmailClickthrough',
+    SUBSCRIBES: 'Subscribe',
+    UNSUBSCRIBES: 'Unsubscribe',
+    BOUNCES: 'Bounceback'
+}
 
 class MaxPollingAttemptsException(Exception):
     pass
@@ -60,7 +83,11 @@ class EloquaClient(BaseClient):
         self.endpoint_name = None
 
     def build_headers(self):
-        """These headers should remain the same for all request types"""
+        """
+        These headers should remain the same for all request types
+        Returns:
+            auth_headers (dict)
+        """
         auth_key = self.build_basic_authorization()
 
         return {
@@ -69,11 +96,24 @@ class EloquaClient(BaseClient):
         }
 
     def build_param(self, key, value, dict={}):
+        """
+        Generates request parameters
+        Args:
+            key (str)
+            value (str)
+            existing params (dict)
+        Returns:
+            updated params (dict)
+        """
         dict[key] = value
         return dict
 
     def build_basic_authorization(self):
-        """Encodes the sitename, username, and password to base64"""
+        """
+        Encodes the sitename, username, and password to base64
+        Returns:
+            authorization key (str)
+        """
         sitename = self.config.get('sitename')
         username = self.config.get('username')
         password = self.config.get('password')
@@ -86,7 +126,13 @@ class EloquaClient(BaseClient):
         return auth_key_str
 
     def build_base_url(self, method='GET'):
-        """Need to request the base url from the api"""
+        """
+        Need to request the base url from the api
+        Args:
+            request method (str)
+        Returns:
+            request url (str)
+        """
         path = BASE_URL_PATH
         response = request(method, path, headers=self.request_headers)
         response_json = response.json()
@@ -95,6 +141,15 @@ class EloquaClient(BaseClient):
         return base_url
 
     def build_request_config(self, url, params=None, run=True):
+        """
+        Builds request configuration
+        Args:
+            url (str)
+            params (dict)
+            run (bool)
+        Returns:
+            request configuration (dict)
+        """
         request_config = {
             'url': url,
             'headers': self.request_headers,
@@ -104,10 +159,37 @@ class EloquaClient(BaseClient):
 
         return request_config
 
+    def request_stream_schema(self, stream_name):
+        """
+        Creates request for stream schema and returns schema
+        Args:
+            stream_name (str)
+        Returns:
+            field schema (dict)
+        """
+        data_endpoint = CONTACTS if stream_name == CONTACTS else ACTIVITIES
+        request_url = self.base_url + BULK_PATH + data_endpoint + SCHEMA_ENDPOINT
+        request_config = self.build_request_config(request_url)
+        method = GET
+
+        response = self.make_request(request_config, method=method)
+        response_json = response.json()
+        schema = response_json.get('items')
+        return schema
+
     def request_bulk_export(self, stream, start_date, end_date, event):
-        """Creates a data export and returns the export id"""
-        """Note the bulk export is unreliable and often"""
-        """requires multiple syncs in order to succeed"""
+        """
+        Creates a data export and returns the export id
+        Note the bulk export is unreliable and often
+        requires multiple syncs in order to succeed
+        Args:
+            stream (cls)
+            start_date (str)
+            end_date (str)
+            event (str)
+        Returns:
+            sync status uri (str)
+        """
         self.endpoint_name = ACTIVITIES if event else CONTACTS
 
         export_uri = self.build_export_definition(stream, start_date, end_date, event)
@@ -128,7 +210,16 @@ class EloquaClient(BaseClient):
         return sync_status_uri
 
     def build_export_definition(self, stream, start_date, end_date, event):
-        """Creates a data export and returns an export uri"""
+        """
+        Creates a data export and returns an export uri
+        Args:
+            stream (cls)
+            start_date (str)
+            end_date (str)
+            event (str)
+        Returns:
+            export uri (str)
+        """
         request_body = self.build_export_body(stream, start_date, end_date, event)
         request_url = self.base_url + BULK_PATH + self.endpoint_name + EXPORTS_ENDPOINT
         request_config = self.build_request_config(request_url)
@@ -141,17 +232,24 @@ class EloquaClient(BaseClient):
         return export_uri
 
     def build_export_body(self, stream, start_date, end_date, event):
-        """Builds the export body based on the config and stream metadata"""
-        """start_date needs to be formatted as 2019-08-06 04:29:15.440"""
+        """
+        Builds the export body based on the config and stream metadata
+        start_date needs to be formatted as 2019-08-06 04:29:15.440
+        Args:
+            stream (cls)
+            start_date (str)
+            end_date (str)
+            event (str)
+        Returns:
+            request body (dict)
+        """
         stream_name = stream.stream
         name = 'Eloqua {stream_name} stream: {start_date}'.format(
             stream_name=stream_name,
             start_date=start_date
         )
 
-        export_type = "{}_export_fields".format(self.endpoint_name)
-        str_fields = self.config.get(export_type)
-        fields = self.string_to_dict(str_fields)
+        fields = self.generate_request_fields(stream_name)
         filter_field = fields.get(stream.meta_fields.get('replication_key'))
         filter = "'{filter_field}'>='{start_date}'".format(
             filter_field=filter_field,
@@ -186,12 +284,40 @@ class EloquaClient(BaseClient):
 
         return request_body
 
-    def string_to_dict(self, str):
-        dict = ast.literal_eval(str)
-        return dict
+    def generate_request_fields(self, stream_name):
+        """
+        Generates list of fields to be included in bulk export
+        Args:
+            stream_name (str)
+        Returns:
+            request_fields (dict)
+        """
+        schema = self.request_stream_schema(stream_name)
+        request_fields = {}
+
+        # Email engagement streams (everything outside of contacts)
+        # will have same schema endpoint but differing schema fields
+        # Need to select only fields that are available for each
+        # engagement metric
+        if stream_name == CONTACTS:
+            for field in schema:
+                field_name = field.get('internalName').lower()
+                request_fields[field_name] = field.get('statement')
+        else:
+            for field in schema:
+                if EVENT_TYPES[stream_name] in field.get('activityTypes'):
+                    field_name = field.get('internalName').lower()
+                    request_fields[field_name] = field.get('statement')
+        return request_fields
 
     def synchronize_export_data(self, export_uri):
-        """Creates a sync for the export and returns a status uri"""
+        """
+        Creates a sync for the export and returns a status uri
+        Args:
+            export_uri (str)
+        Returns:
+            sync_status_uri (str)
+        """
         request_body = {
             "syncedInstanceUri": export_uri
         }
@@ -206,7 +332,13 @@ class EloquaClient(BaseClient):
         return sync_status_uri
 
     def check_sync_status(self, sync_status_uri):
-        """Takes a sync status uri and retrieves its status"""
+        """
+        Takes a sync status uri and retrieves its status
+        Args:
+            sync_status_uri (str)
+        Returns:
+            status (str)
+        """
         request_url = self.base_url + BULK_PATH + sync_status_uri
         request_config = self.build_request_config(request_url)
 
@@ -292,7 +424,18 @@ class EloquaClient(BaseClient):
         return errors
 
     def fetch_bulk_export_records(self, sync_status_uri, offset, limit, run):
-        """Once the export data is ready this will retrieve the records from the export"""
+        """
+        Once the export data is ready this will retrieve the records from the export
+        Args:
+            sync_status_uri (str)
+            offset (int)
+            limit (int)
+            run (bool)
+        Returns:
+            records (dict)
+            has_more (bool)
+            total_records (int)
+        """
         param_payload = self.build_param(key='offset', value=offset)
         self.build_param(key='limit', value=limit, dict=param_payload)
         request_url = self.base_url + BULK_PATH + sync_status_uri + \

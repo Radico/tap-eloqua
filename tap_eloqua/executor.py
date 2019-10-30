@@ -1,11 +1,20 @@
+from .contacts import ContactsStream
+from .bounces import BouncesStream
+from .clicks import ClicksStream
+from .opens import OpensStream
+from .sends import SendsStream
+from .subscribes import SubscribesStream
+from .unsubscribes import UnsubscribesStream
 from tap_kit import TapExecutor
 from tap_kit.utils import timestamp_to_iso8601, transform_write_and_count, \
     format_last_updated_for_request
 from requests import request
 from datetime import datetime
 
-import singer
+import json
 import pendulum
+import singer
+import sys
 
 LOGGER = singer.get_logger()
 
@@ -35,6 +44,17 @@ EVENT_TYPES = {
     CONTACTS: None
 }
 
+# Streams with dynamic schemas
+DYNAMIC_SCHEMAS = [
+    (CONTACTS, ContactsStream),
+    (SENDS, SendsStream),
+    (OPENS, OpensStream),
+    (CLICKS, ClicksStream),
+    (SUBSCRIBES, SubscribesStream),
+    (UNSUBSCRIBES, UnsubscribesStream),
+    (BOUNCES, BouncesStream)
+]
+
 class EloquaExecutor(TapExecutor):
 
     def __init__(self, streams, args, client):
@@ -48,9 +68,61 @@ class EloquaExecutor(TapExecutor):
 
         self.replication_key_format = 'datetime_string'
 
+    def discover(self):
+        """
+        Replace standard tap-kit discover in order to work with
+        dynamic schemas.
+        Returns:
+            catalog (json)
+        """
+        catalog = []
+
+        for stream in DYNAMIC_SCHEMAS:
+            stream_name = stream[0]
+            stream_class = stream[1]
+            '''catalog.append(
+                stream_class(
+                    self.schema_generator(stream_name)
+                ).generate_catalog()
+            )'''
+            contacts = stream_class(self.schema_generator(stream_name))
+            catalog.append(contacts.generate_catalog())
+
+        return json.dump({'streams': catalog}, sys.stdout, indent=4)
+
+    def schema_generator(self, stream_name):
+        """
+        The fields associated with each Eloqua stream varies from
+        organization to organization. Need to dynamically generate
+        if all fields are going to be selected for extraction.
+        Args:
+            stream_name (str)
+        Returns:
+            schema (generator)
+        """
+        schema = self.client.request_stream_schema(stream_name)
+
+        # Email engagement streams (everything outside of contacts)
+        # will have same schema endpoint but differing schema fields
+        # Need to select only fields that are available for each
+        # engagement metric
+        if stream_name == CONTACTS:
+            for field in schema:
+                yield field.get('internalName').lower()
+        else:
+            for field in schema:
+                if EVENT_TYPES[stream_name] in field.get('activityTypes'):
+                    yield field.get('internalName').lower()
+
     def call_incremental_stream(self, stream):
-        """Method to call incrementally synced streams"""
-        """TODO: only for bulk api, update for rest api too"""
+        """
+        Method to call incrementally synced streams
+        TODO: only for bulk api, update for rest api too
+        Args:
+            stream (cls)
+        Returns:
+            last_record_date (dttime)
+        """
         stream_name = stream.stream
         event_name = EVENT_TYPES.get(stream_name)
         last_updated = format_last_updated_for_request(
