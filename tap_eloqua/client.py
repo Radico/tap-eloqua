@@ -34,7 +34,7 @@ ACTIVITIES = 'activities'
 # How long to wait between polling and retries
 WAIT_SECS_BETWEEN_STATUS_CHECKS = 60
 # How many times to try getting sync status before giving up
-MAX_NUM_POLLING_ATTEMPTS = 50
+MAX_NUM_POLLING_ATTEMPTS = 100
 # How many times to retry failed sync before giving up
 MAX_RETRY_ATTEMPTS = 20
 
