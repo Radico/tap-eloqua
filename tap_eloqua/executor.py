@@ -186,3 +186,61 @@ class EloquaExecutor(TapExecutor):
                         ))
 
         return latest_record_date
+
+    def call_full_stream(self, stream):
+        """
+        Method to call all fully synced streams
+        """
+
+        stream_name = stream.stream
+        event_name = EVENT_TYPES.get(stream_name)
+        start_date = pendulum.parse(self.config['full_table_start_date'])
+        end_date = start_date.add(years=1)
+        LOGGER.info("Extracting %s since %s." % (stream_name, start_date))
+
+        requests = [(start_date, end_date)]
+
+        while requests:
+            request_filters = requests.pop(0)
+            request_start = request_filters[0]
+            request_end = request_filters[1]
+            request_start_str = request_start.to_datetime_string()
+            request_end_str = request_end.to_datetime_string()
+            LOGGER.info('Requesting export from %s to %s.' % (
+                request_start_str, request_end_str
+            ))
+
+            sync_uri = self.client.request_bulk_export(stream, request_start_str, request_end_str, event_name)
+            offset = 0
+            run = True
+
+            while run:
+                records, has_more, total_records = self.client.fetch_bulk_export_records(
+                    sync_uri, offset, MAX_RECORDS_RETURNED, run
+                )
+                if total_records >= EXPORT_LIMIT:
+                    LOGGER.info('Export exceeds 5M record limit. Splitting into multiple requests.')
+                    new_end_date = request_start + ((request_end - request_start) / 2)
+                    requests.append((request_start, new_end_date))
+                    requests.append((new_end_date, request_end))
+                    run = False
+
+                elif total_records == 0:
+                    LOGGER.info('No records found between %s and %s.' % (request_start, request_end))
+                    run = False
+
+                else:
+                    transform_write_and_count(stream, records)
+                    
+                    if not has_more:
+                        run = False
+                        LOGGER.info('Completed fetching records. Fetched %s records.' % total_records)
+
+                    else:
+                        offset = offset + MAX_RECORDS_RETURNED
+                        LOGGER.info('Fetched %s of %s records. Fetching next set of records.' % (
+                            offset, total_records
+                        ))
+            if request_end < pendulum.now():
+                new_end_date = request_end.add(years=1)
+                requests.append((request_end, new_end_date))

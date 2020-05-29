@@ -9,9 +9,9 @@ class ContactsStream(Stream):
         self.stream = 'contacts'
         self.meta_fields = {
                 "key_properties": ['c_emailaddress'],
-                "replication_method": 'incremental',
-                "replication_key": 'c_datemodified',
-                "incremental_search_key": 'c_datemodified',
+                "replication_method": 'full_table',
+                "replication_key": 'c_datecreated',
+                "incremental_search_key": 'c_datecreated',
                 "selected_by_default": False
         }
         self.schema = self.generate_schema(schema_generator)
