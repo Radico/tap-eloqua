@@ -195,7 +195,7 @@ class EloquaExecutor(TapExecutor):
         stream_name = stream.stream
         event_name = EVENT_TYPES.get(stream_name)
         start_date = pendulum.parse(self.config['full_table_start_date'])
-        end_date = start_date.add(years=1)
+        end_date = start_date.add(months=1)
         LOGGER.info("Extracting %s since %s." % (stream_name, start_date))
 
         requests = [(start_date, end_date)]
@@ -242,5 +242,5 @@ class EloquaExecutor(TapExecutor):
                             offset, total_records
                         ))
             if request_end < pendulum.now():
-                new_end_date = request_end.add(years=1)
+                new_end_date = request_end.add(months=1)
                 requests.append((request_end, new_end_date))
