@@ -241,6 +241,7 @@ class EloquaExecutor(TapExecutor):
                         LOGGER.info('Fetched %s of %s records. Fetching next set of records.' % (
                             offset, total_records
                         ))
-            if request_end < pendulum.now():
+            # temporary for testing
+            if request_end < pendulum.now().subtract(months=20):
                 new_end_date = request_end.add(months=1)
                 requests.append((request_end, new_end_date))
