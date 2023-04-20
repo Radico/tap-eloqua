@@ -14,7 +14,6 @@ setup(
         'requests==2.18.4',
         "pendulum==1.2.0",
         "tap-kit @ git+https://github.com/Radico/tap-kit.git@main",
-        'ipdb==0.8.1'
     ],
     dependency_links=[
         "https://github.com/dmzobel/tap-kit/tarball/main#egg=tap-kit-0.1.1",
