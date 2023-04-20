@@ -13,7 +13,7 @@ setup(
         "singer-python==5.2.0",
         'requests==2.18.4',
         "pendulum==1.2.0",
-        "tap-kit @ git+https://github.com/dmzobel/tap-kit.git@main",
+        "tap-kit @ git+https://github.com/Radico/tap-kit.git@main",
         'ipdb==0.8.1'
     ],
     dependency_links=[
