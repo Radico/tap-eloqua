@@ -136,7 +136,7 @@ class EloquaClient(BaseClient):
         path = BASE_URL_PATH
         response = request(method, path, headers=self.request_headers)
         response_json = response.json()
-        logger.info(response_json)
+        LOGGER.info(response_json)
         base_url = response_json.get('urls').get('base')
 
         return base_url
