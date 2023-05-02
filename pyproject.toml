@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "tap-eloqua"
+version = "0.1.2"
+description = "Singer.io tap for extracting data from Eloqua"
+authors = ["Simon Data"]
+license = "Apache License 2.0"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+singer-python = "5.2.0"
+requests = "2.18.4"
+pendulum = "1.2.0"
+tap-kit = { version = "0.1.2", source="artifactory" }
+
+[[tool.poetry.source]]
+name = "artifactory"
+url = "https://simondata.jfrog.io/artifactory/api/pypi/pypi/simple"
+secondary = true
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+tap-eloqua = "tap_eloqua:main"
+
+[tool.poetry.plugins]
+
+[tool.poetry.plugins."tap-eloqua"]
+"tap-eloqua" = "tap_eloqua:main"
